@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>创建从DBCS到ADW的数据库链接</title>
+    <url>/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/</url>
+    <content><![CDATA[<p>近期在帮助客户迁移Oracle database + OAC 到 ADW + OAC时遇到一些困难，为了不影响客户业务部门日常使用要求，采取了创建数据库链接的过渡方案(DBCS + ADW +OAC)。考虑到大家在未来可能也会遇到此类需求，故将如何创建从DBCS到ADW的数据库链接（DBLink）的过程整理成手册，并标注了关键步骤，供大家参考。</p>
+<a id="more"></a>
+
+<h2 id="环境配置"><a href="#环境配置" class="headerlink" title="环境配置"></a>环境配置</h2><h3 id="下载-ADW-Wallet-文件"><a href="#下载-ADW-Wallet-文件" class="headerlink" title="下载 ADW Wallet 文件"></a>下载 ADW Wallet 文件</h3><p><strong>步骤1：</strong> 进入Autonomous Data Warehouse控制台，选择需要创建数据库链接的ADW实例，单击【DB Connection】, 单击【Download Wallet】，输入wallet的密码，下载并保存wallet文件。</p>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step1.jpg" class>
+
+<h3 id="将-ADW-Wallet-文件上传到DBCS实例"><a href="#将-ADW-Wallet-文件上传到DBCS实例" class="headerlink" title="将 ADW Wallet 文件上传到DBCS实例"></a>将 ADW Wallet 文件上传到DBCS实例</h3><p><strong>步骤2：</strong> 在DBCS实例上创建一个用于存储wallet的目录，并修改其属性</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">[opc@sclei ~]$ sudo mkdir -p /u01/targetwallet</span><br><span class="line">[opc@sclei ~]$ sudo chown -R oracle:oinstall /u01/targetwallet</span><br><span class="line">[opc@sclei u01]$ sudo chmod 777 /u01/targetwallet</span><br></pre></td></tr></table></figure>
+
+<p><strong>步骤3：</strong> 通过FTP的工具将ADW wallet文件上传到步骤2创建的目录【/u01/targetwallet】下</p>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step3.jpg" class>
+
+<h3 id="解压wallet文件"><a href="#解压wallet文件" class="headerlink" title="解压wallet文件"></a>解压wallet文件</h3><p><strong>步骤4：</strong> 解压wallet文件。在后面用命令创建数据库链接时，其中路径参数会指向此处目录</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">[opc@sclei ~]$ <span class="built_in">cd</span> /u01/targetwallet</span><br><span class="line">[opc@sclei targetwallet]$ unzip Wallet_clong_scleiadw01.zip</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step4.jpg" class>
+
+<h3 id="修改GLOBAL-NAMES参数"><a href="#修改GLOBAL-NAMES参数" class="headerlink" title="修改GLOBAL_NAMES参数"></a>修改GLOBAL_NAMES参数</h3><p><strong>步骤5：</strong> 更改GLOBAL_NAME参数的默认值，将其修改为FALSE</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">SQL&gt; alter system <span class="built_in">set</span> global_names = FALSE;</span><br><span class="line">SQL&gt; sho parameter global</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step5.jpg" class>
+
+<h3 id="添加SQLNET-ORA参数"><a href="#添加SQLNET-ORA参数" class="headerlink" title="添加SQLNET.ORA参数"></a>添加SQLNET.ORA参数</h3><p><strong>步骤6：</strong> 在DBCS的SQLNET.ORA添加参数SQLNET.IGNORE_ANO_ENCRYPTION_FOR_TCPS=TRUE</p>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step6.jpg" class>
+
+<div class="note danger">
+            <p>省略此参数配置，会产生 ”ORA-12696: Double Encryption Turned On, login disallowed“  错误</p>
+          </div>
+
+<h2 id="创建数据库链接"><a href="#创建数据库链接" class="headerlink" title="创建数据库链接"></a>创建数据库链接</h2><p>创建从DBCS到ADW的数据库链接的语法：</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">create database link &lt;dblink_name&gt; connect to admin identified by <span class="string">"&lt;password&gt;"</span> using <span class="string">'(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.&lt;region&gt;.oraclecloud.com))(connect_data=(service_name=&lt;service_name&gt;))(security=(my_wallet_directory=&lt;autonomous wallet path &gt;)(ssl_server_cert_dn="&lt;Get this from Tns File&gt;")))'</span>;</span><br></pre></td></tr></table></figure>
+<p>其中，<br><strong>*dblink_name *</strong>: 准备创建的数据库链接名字<br><strong>*password *</strong>: ADW的 admin用户的密码<br><strong><em>my_wallet_directory</em></strong> : 步骤4中将wallet解压的目录路径<br><strong><em>service_name</em></strong> : ADW wallet文件tnsnames.ora文件中可以找到相关信息</p>
+<p><strong>步骤7：</strong> 命令创建数据库链接</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">SQL&gt; create public database link sclei connect to ADMIN identified by <span class="string">"********"</span> using <span class="string">'(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-seoul-1.oraclecloud.com))(connect_data=(service_name=o6f6px3nvcc3nxu_scleiadw01_medium.adwc.oraclecloud.com))(security=(my_wallet_directory=/u01/targetwallet)(ssl_server_cert_dn="CN=adb.ap-seoul-1.oraclecloud.com,OU=Oracle ADB SEOUL,O=Oracle Corporation,L=Redwood City,ST=California,C=US")))'</span>;</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step7.jpg" class>
+
+<h2 id="验证数据库链接是否成功"><a href="#验证数据库链接是否成功" class="headerlink" title="验证数据库链接是否成功"></a>验证数据库链接是否成功</h2><p><strong>步骤8：</strong><br>SQL命令，select * from dual；是从DBCS数据库查询的结果；</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">SQL&gt; select * from dual；</span><br></pre></td></tr></table></figure>
+
+<p>SQL命令，select * from dual@sclei；是通过创建的数据库链接从ADW查询的结果；</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">SQL&gt; select * from dual@sclei；</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step8.jpg" class>
+
+
+<h2 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h2><p>1.<a href="https://support.oracle.com/epmos/faces/DocumentDisplay?_afrLoop=468374598409722&id=2592265.1&_afrWindowMode=0&_adf.ctrl-state=b91ql3r4c_4" target="_blank" rel="noopener">Create and Configure Database Link in Autonomous Database (Doc ID 2592265.1)</a><br>2.<a href="https://blogs.oracle.com/datawarehousing/how-to-create-a-database-link-from-an-autonomous-data-warehouse-to-a-database-cloud-service-instance-v2" target="_blank" rel="noopener">How to Create a Database Link from an Autonomous Data Warehouse to a Database Cloud Service Instance</a></p>
+]]></content>
+      <categories>
+        <category>ADW</category>
+      </categories>
+      <tags>
+        <tag>ADW</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Hello World</title>
+    <url>/2020/02/23/hello-world/</url>
+    <content><![CDATA[<p>Welcome to <a href="https://hexo.io/" target="_blank" rel="noopener">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/" target="_blank" rel="noopener">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html" target="_blank" rel="noopener">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues" target="_blank" rel="noopener">GitHub</a>.</p>
+<a id="more"></a>
+
+
+<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo new <span class="string">"My New Post"</span></span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/writing.html" target="_blank" rel="noopener">Writing</a></p>
+<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/server.html" target="_blank" rel="noopener">Server</a></p>
+<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/generating.html" target="_blank" rel="noopener">Generating</a></p>
+<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
+
+<p>More info: <a href="https://hexo.io/docs/one-command-deployment.html" target="_blank" rel="noopener">Deployment</a></p>
+<div class="note danger">
+            <p>示例学习</p>
+          </div>
+]]></content>
+      <categories>
+        <category>APEX</category>
+      </categories>
+  </entry>
+</search>

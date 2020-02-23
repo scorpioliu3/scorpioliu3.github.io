@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-hans">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 4.2.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/font-awesome.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"yoursite.com","root":"/","scheme":"Mist","version":"7.7.1","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="近期在帮助客户迁移Oracle database + OAC 到 ADW + OAC时遇到一些困难，为了不影响客户业务部门日常使用要求，采取了创建数据库链接的过渡方案(DBCS + ADW +OAC)。考虑到大家在未来可能也会遇到此类需求，故将如何创建从DBCS到ADW的数据库链接（DBLink）的过程整理成手册，并标注了关键步骤，供大家参考。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="创建从DBCS到ADW的数据库链接">
+<meta property="og:url" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/index.html">
+<meta property="og:site_name" content="MyArticle">
+<meta property="og:description" content="近期在帮助客户迁移Oracle database + OAC 到 ADW + OAC时遇到一些困难，为了不影响客户业务部门日常使用要求，采取了创建数据库链接的过渡方案(DBCS + ADW +OAC)。考虑到大家在未来可能也会遇到此类需求，故将如何创建从DBCS到ADW的数据库链接（DBLink）的过程整理成手册，并标注了关键步骤，供大家参考。">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step1.jpg">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step3.jpg">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step4.jpg">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step5.jpg">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step6.jpg">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step7.jpg">
+<meta property="og:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step8.jpg">
+<meta property="article:published_time" content="2020-02-23T06:42:19.000Z">
+<meta property="article:modified_time" content="2020-02-23T09:06:56.093Z">
+<meta property="article:author" content="Scorpio.Liu">
+<meta property="article:tag" content="ADW">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step1.jpg">
+
+<link rel="canonical" href="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome: false,
+    isPost: true
+  };
+</script>
+
+  <title>创建从DBCS到ADW的数据库链接 | MyArticle</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <div>
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">MyArticle</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+  </div>
+
+  <div class="site-nav-right"></div>
+</div>
+
+
+<nav class="site-nav">
+  
+  <ul id="menu" class="menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-fw fa-home"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-fw fa-tags"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-fw fa-th"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-fw fa-archive"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+
+</nav>
+  <div class="site-search">
+    <div class="popup search-popup">
+    <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocorrect="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result"></div>
+
+</div>
+<div class="search-pop-overlay"></div>
+
+  </div>
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content">
+            
+
+  <div class="posts-expand">
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block " lang="zh-hans">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/uploads/avatar.png">
+      <meta itemprop="name" content="Scorpio.Liu">
+      <meta itemprop="description" content="笃初诚美，慎终宜令">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="MyArticle">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          创建从DBCS到ADW的数据库链接
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2020-02-23 14:42:19 / 修改时间：17:06:56" itemprop="dateCreated datePublished" datetime="2020-02-23T14:42:19+08:00">2020-02-23</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/ADW/" itemprop="url" rel="index">
+                    <span itemprop="name">ADW</span>
+                  </a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>近期在帮助客户迁移Oracle database + OAC 到 ADW + OAC时遇到一些困难，为了不影响客户业务部门日常使用要求，采取了创建数据库链接的过渡方案(DBCS + ADW +OAC)。考虑到大家在未来可能也会遇到此类需求，故将如何创建从DBCS到ADW的数据库链接（DBLink）的过程整理成手册，并标注了关键步骤，供大家参考。</p>
+<a id="more"></a>
+
+<h2 id="环境配置"><a href="#环境配置" class="headerlink" title="环境配置"></a>环境配置</h2><h3 id="下载-ADW-Wallet-文件"><a href="#下载-ADW-Wallet-文件" class="headerlink" title="下载 ADW Wallet 文件"></a>下载 ADW Wallet 文件</h3><p><strong>步骤1：</strong> 进入Autonomous Data Warehouse控制台，选择需要创建数据库链接的ADW实例，单击【DB Connection】, 单击【Download Wallet】，输入wallet的密码，下载并保存wallet文件。</p>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step1.jpg" class>
+
+<h3 id="将-ADW-Wallet-文件上传到DBCS实例"><a href="#将-ADW-Wallet-文件上传到DBCS实例" class="headerlink" title="将 ADW Wallet 文件上传到DBCS实例"></a>将 ADW Wallet 文件上传到DBCS实例</h3><p><strong>步骤2：</strong> 在DBCS实例上创建一个用于存储wallet的目录，并修改其属性</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">[opc@sclei ~]$ sudo mkdir -p /u01/targetwallet</span><br><span class="line">[opc@sclei ~]$ sudo chown -R oracle:oinstall /u01/targetwallet</span><br><span class="line">[opc@sclei u01]$ sudo chmod 777 /u01/targetwallet</span><br></pre></td></tr></table></figure>
+
+<p><strong>步骤3：</strong> 通过FTP的工具将ADW wallet文件上传到步骤2创建的目录【/u01/targetwallet】下</p>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step3.jpg" class>
+
+<h3 id="解压wallet文件"><a href="#解压wallet文件" class="headerlink" title="解压wallet文件"></a>解压wallet文件</h3><p><strong>步骤4：</strong> 解压wallet文件。在后面用命令创建数据库链接时，其中路径参数会指向此处目录</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[opc@sclei ~]$ <span class="built_in">cd</span> /u01/targetwallet</span><br><span class="line">[opc@sclei targetwallet]$ unzip Wallet_clong_scleiadw01.zip</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step4.jpg" class>
+
+<h3 id="修改GLOBAL-NAMES参数"><a href="#修改GLOBAL-NAMES参数" class="headerlink" title="修改GLOBAL_NAMES参数"></a>修改GLOBAL_NAMES参数</h3><p><strong>步骤5：</strong> 更改GLOBAL_NAME参数的默认值，将其修改为FALSE</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">SQL&gt; alter system <span class="built_in">set</span> global_names = FALSE;</span><br><span class="line">SQL&gt; sho parameter global</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step5.jpg" class>
+
+<h3 id="添加SQLNET-ORA参数"><a href="#添加SQLNET-ORA参数" class="headerlink" title="添加SQLNET.ORA参数"></a>添加SQLNET.ORA参数</h3><p><strong>步骤6：</strong> 在DBCS的SQLNET.ORA添加参数SQLNET.IGNORE_ANO_ENCRYPTION_FOR_TCPS=TRUE</p>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step6.jpg" class>
+
+<div class="note danger">
+            <p>省略此参数配置，会产生 ”ORA-12696: Double Encryption Turned On, login disallowed“  错误</p>
+          </div>
+
+<h2 id="创建数据库链接"><a href="#创建数据库链接" class="headerlink" title="创建数据库链接"></a>创建数据库链接</h2><p>创建从DBCS到ADW的数据库链接的语法：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">create database link &lt;dblink_name&gt; connect to admin identified by <span class="string">"&lt;password&gt;"</span> using <span class="string">'(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.&lt;region&gt;.oraclecloud.com))(connect_data=(service_name=&lt;service_name&gt;))(security=(my_wallet_directory=&lt;autonomous wallet path &gt;)(ssl_server_cert_dn="&lt;Get this from Tns File&gt;")))'</span>;</span><br></pre></td></tr></table></figure>
+<p>其中，<br><strong>*dblink_name *</strong>: 准备创建的数据库链接名字<br><strong>*password *</strong>: ADW的 admin用户的密码<br><strong><em>my_wallet_directory</em></strong> : 步骤4中将wallet解压的目录路径<br><strong><em>service_name</em></strong> : ADW wallet文件tnsnames.ora文件中可以找到相关信息</p>
+<p><strong>步骤7：</strong> 命令创建数据库链接</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SQL&gt; create public database link sclei connect to ADMIN identified by <span class="string">"********"</span> using <span class="string">'(description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.ap-seoul-1.oraclecloud.com))(connect_data=(service_name=o6f6px3nvcc3nxu_scleiadw01_medium.adwc.oraclecloud.com))(security=(my_wallet_directory=/u01/targetwallet)(ssl_server_cert_dn="CN=adb.ap-seoul-1.oraclecloud.com,OU=Oracle ADB SEOUL,O=Oracle Corporation,L=Redwood City,ST=California,C=US")))'</span>;</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step7.jpg" class>
+
+<h2 id="验证数据库链接是否成功"><a href="#验证数据库链接是否成功" class="headerlink" title="验证数据库链接是否成功"></a>验证数据库链接是否成功</h2><p><strong>步骤8：</strong><br>SQL命令，select * from dual；是从DBCS数据库查询的结果；</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SQL&gt; select * from dual；</span><br></pre></td></tr></table></figure>
+
+<p>SQL命令，select * from dual@sclei；是通过创建的数据库链接从ADW查询的结果；</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SQL&gt; select * from dual@sclei；</span><br></pre></td></tr></table></figure>
+<img src="/2020/02/23/%E5%88%9B%E5%BB%BA%E4%BB%8EDBCS%E5%88%B0ADW%E7%9A%84%E6%95%B0%E6%8D%AE%E5%BA%93%E9%93%BE%E6%8E%A5/step8.jpg" class>
+
+
+<h2 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h2><p>1.<a href="https://support.oracle.com/epmos/faces/DocumentDisplay?_afrLoop=468374598409722&id=2592265.1&_afrWindowMode=0&_adf.ctrl-state=b91ql3r4c_4" target="_blank" rel="noopener">Create and Configure Database Link in Autonomous Database (Doc ID 2592265.1)</a><br>2.<a href="https://blogs.oracle.com/datawarehousing/how-to-create-a-database-link-from-an-autonomous-data-warehouse-to-a-database-cloud-service-instance-v2" target="_blank" rel="noopener">How to Create a Database Link from an Autonomous Data Warehouse to a Database Cloud Service Instance</a></p>
+
+    </div>
+
+    
+    
+    
+      
+
+        <div class="reward-container">
+  <div>您的肯定，是我继续创作的动力！</div>
+  <button onclick="var qr = document.getElementById('qr'); qr.style.display = (qr.style.display === 'none') ? 'block' : 'none';">
+    打赏
+  </button>
+  <div id="qr" style="display: none;">
+      
+      <div style="display: inline-block;">
+        <img src="/images/wechatpay.png" alt="Scorpio.Liu 微信支付">
+        <p>微信支付</p>
+      </div>
+      
+      <div style="display: inline-block;">
+        <img src="/images/alipay.png" alt="Scorpio.Liu 支付宝">
+        <p>支付宝</p>
+      </div>
+
+  </div>
+</div>
+
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/ADW/" rel="tag"># ADW</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2020/02/23/hello-world/" rel="prev" title="Hello World">
+      <i class="fa fa-chevron-left"></i> Hello World
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+	
+   <div>
+    
+    <div>
+    
+        <div style="text-align:center;color: #ccc;font-size:14px;">------ 本文结束 ------</div>
+    
+</div>
+
+    
+   </div>
+
+	
+	
+	
+	
+	
+	
+  </article>
+  
+  
+  
+
+  </div>
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let activeClass = CONFIG.comments.activeClass;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#环境配置"><span class="nav-number">1.</span> <span class="nav-text">环境配置</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#下载-ADW-Wallet-文件"><span class="nav-number">1.1.</span> <span class="nav-text">下载 ADW Wallet 文件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#将-ADW-Wallet-文件上传到DBCS实例"><span class="nav-number">1.2.</span> <span class="nav-text">将 ADW Wallet 文件上传到DBCS实例</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#解压wallet文件"><span class="nav-number">1.3.</span> <span class="nav-text">解压wallet文件</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#修改GLOBAL-NAMES参数"><span class="nav-number">1.4.</span> <span class="nav-text">修改GLOBAL_NAMES参数</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#添加SQLNET-ORA参数"><span class="nav-number">1.5.</span> <span class="nav-text">添加SQLNET.ORA参数</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#创建数据库链接"><span class="nav-number">2.</span> <span class="nav-text">创建数据库链接</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#验证数据库链接是否成功"><span class="nav-number">3.</span> <span class="nav-text">验证数据库链接是否成功</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#参考链接"><span class="nav-number">4.</span> <span class="nav-text">参考链接</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Scorpio.Liu"
+      src="/uploads/avatar.png">
+  <p class="site-author-name" itemprop="name">Scorpio.Liu</p>
+  <div class="site-description" itemprop="description">笃初诚美，慎终宜令</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">2</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Scorpio.Liu</span>
+</div>
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
